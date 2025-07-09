@@ -3,7 +3,7 @@
 
 [![Paper](https://img.shields.io/badge/paper-IEEE-blue)](https://ieeexplore.ieee.org/document/YOUR_PAPER_ID) [![code](https://img.shields.io/badge/code-GitHub-green.svg)](https://github.com/Jabruson/FDN-TIP2025)
 
-This is the official PyTorch implementation of the paper **"Fourier-based Decoupling Network for Joint Low-Light Image Enhancement and Deblurring"**.
+This is the official PyTorch implementation of the paper **"Fourier-based Decoupling Network for Joint Low-Light Image Enhancement and Deblurring"**. (IEEE TIP 2025)
 
 This paper has been accepted by IEEE TRANSACTIONS ON IMAGE PROCESSING.
 
@@ -24,4 +24,4 @@ Our FDN network consists of two core components:
 2.  **Fourier-based Decoupling Transformer (FDformer)**: Utilizes the priors from MAR and the phase from the input image to perform fine-grained image restoration.
 
 **Overall Architecture of FDN:**
-*Insert Figure 4 (a) here*
+
