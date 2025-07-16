@@ -29,9 +29,20 @@ Nighttime handheld photography is often simultaneously affected by low light and
 ### Real-LOL-Blur Dataset
 - **Google Drive:** [Link](https://drive.google.com/file/d/1jOaUSTRh1OYfNDYPnpHFauP_XlH21Rgv/view?usp=drive_link)
 - **Baidu Pan:** [Link](https://pan.baidu.com/s/1zibBq9YPLZ2HGXsvsmOtmA) (Extraction code: uw61)
+
+## Testing
+The pretrain modles is available at FDN/checkpoint/
+1. **LOL-Blur Testing (also available for other dataset):**
+   ```python
+    python inference_fdn_lolblur.py
+    ```
+1. **Metric testing:**
+   ```python
+    python m.py -m psnr ssim lpips
+    ```
 ## Training
 
-The training process:
+The training process (you should change your data root in options):
 
 1.  **MAR Training:**
     ```bash
