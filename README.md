@@ -25,3 +25,21 @@ Nighttime handheld photography is often simultaneously affected by low light and
 ### Real-LOL-Blur Dataset
 - **Google Drive:** [Link](https://drive.google.com/file/d/1jOaUSTRh1OYfNDYPnpHFauP_XlH21Rgv/view?usp=drive_link)
 - **Baidu Pan:** [Link](https://pan.baidu.com/s/1zibBq9YPLZ2HGXsvsmOtmA) (Extraction code: uw61)
+## Training
+
+The training process:
+
+1.  **MAR Training:**
+    ```bash
+    sh MAR.sh
+    ```
+
+2.  **FDN Training:**
+    ```bash
+    sh fdn.sh
+    ```
+
+3.  **LPNet Training:**
+    ```bash
+    sh train_lpnet.sh
+    ```
