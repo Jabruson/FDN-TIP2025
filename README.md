@@ -1,6 +1,6 @@
 # Fourier-based Decoupling Network for Joint Low-Light Image Enhancement and Deblurring (FDN)
 
-[![Paper](https://img.shields.io/badge/paper-IEEE-blue)](https://ieeexplore.ieee.org/document/YOUR_PAPER_ID) [![code](https://img.shields.io/badge/code-GitHub-green.svg)](https://github.com/Jabruson/FDN-TIP2025)
+[![Paper](https://img.shields.io/badge/paper-IEEE-blue)](https://ieeexplore.ieee.org/document/11105001) [![code](https://img.shields.io/badge/code-GitHub-green.svg)](https://github.com/Jabruson/FDN-TIP2025)
 
 This is the official PyTorch implementation of the paper **"Fourier-based Decoupling Network for Joint Low-Light Image Enhancement and Deblurring"**. (IEEE TIP 2025)
 
