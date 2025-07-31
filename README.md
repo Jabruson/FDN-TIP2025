@@ -36,7 +36,11 @@ The pretrain modles is available at FDN/checkpoint/
    ```python
     python inference_fdn_lolblur.py
     ```
-1. **Metric testing:**
+2. **LOL-V1 Testing (also available for other dataset):**
+   ```python
+    python inference_fdn_lolv1.py
+    ```
+3. **Metric testing:**
    ```python
     python m.py -m psnr ssim lpips
     ```
