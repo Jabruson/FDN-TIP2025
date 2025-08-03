@@ -20,9 +20,16 @@ Nighttime handheld photography is often simultaneously affected by low light and
 ![](figs/overall.png "FDN Network Architecture")
 ### FDformer
 ![](figs/fdformer.png "FDformer Architecture")
-## Preparation
+## Preparation for dataset
 LOL-BLur dataset and Real-LOL-Blur dataset can be find in [LEDNet](https://github.com/sczhou/LEDNet).
-
+## Dependencies and Installation
+Python
+Pytorch (1.11)
+scikit-image
+opencv-python
+Tensorboard
+einops
+Other required packages in requirements.txt
 ## Results
 
 ### LOL-Blur Dataset
