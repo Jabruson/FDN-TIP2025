@@ -857,9 +857,9 @@ class FDN(nn.Module):
                             bias=False)
         for param in self.net_a.parameters():
             param.requires_grad = False
-        state = torch.load(
-            '/data/tuluwei/code/fourier_gamma.pth')
-        self.net_a.load_state_dict(state['params'], strict=True)
+        # state = torch.load(
+        #     '/data/tuluwei/code/fourier_gamma.pth')
+        # self.net_a.load_state_dict(state['params'], strict=True)
         self.norm1 = LayerNorm(3, LayerNorm_type='WithBias')
         self.norm2 = LayerNorm(3, LayerNorm_type='WithBias')
         self.norm3 = LayerNorm(3, LayerNorm_type='WithBias')
