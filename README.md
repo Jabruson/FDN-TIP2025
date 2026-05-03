@@ -209,16 +209,6 @@ Modify this to:
 
 This checkpoint is loaded into the internal `net_a` module of `FDN`.
 
-### 3. Optional FDN Checkpoint for LPNet Validation
-
-`LPNet` itself is trained independently. However, if you want LPNet validation to produce restored images through the full FDN pipeline, you may additionally set:
-
-```yaml
-path:
-  pretrain_network_fdn_for_val: ${project_root}/experiments/FDN/models
-```
-
-If left empty, LPNet training still runs, but validation will not perform joint FDN restoration.
 ### 4. Test-Time Checkpoints
 
 For inference:
@@ -272,7 +262,14 @@ The main restoration pipeline is a two-stage process:
 1. `MAR`: auxiliary restoration stage
 2. `FDN`: main restoration network
 
-`LPNet` is an additional illumination-ratio predictor trained separately for final inference.
+`LPNet` is an additional illumination-ratio predictor trained separately.
+
+The intended logic is:
+
+1. `MAR` is trained first
+2. `FDN` is trained with the ground-truth ratio and optionally initialized with MAR weights
+3. `LPNet` is trained independently to predict the ratio under direct supervision from the ground-truth ratio
+4. During inference/testing, `LPNet` predicts the ratio and this predicted ratio is fed into `FDN`
 
 ### Stage 1: MAR
 
@@ -323,9 +320,10 @@ Users should mainly check:
 - `num_gpu`
 - `batch_size_per_gpu`
 
-Optional for image-level LPNet validation:
+Training target:
 
-- `path.pretrain_network_fdn_for_val`
+- `LPNet` predicts the ratio directly
+- supervision comes from the ground-truth ratio computed in the training pipeline
 
 ## Inference
 
@@ -378,6 +376,11 @@ inference:
   input_glob: ${inference.input_root}/*/*
   output_root: ${project_root}/results/FDN_lolblur
 ```
+
+Inference logic:
+
+- `LPNet` first predicts a ratio from the input image
+- the predicted ratio is then used as the ratio input of `FDN`
 
 ## Evaluation
 

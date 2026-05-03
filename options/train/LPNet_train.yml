@@ -52,8 +52,6 @@ network_g:
 path:
   dataset_root: ${project_root}/datasets/lolblur
   pretrain_network_g:
-  pretrain_network_fdn_for_val:
-  param_key_fdn_for_val: params
   strict_load_g:
   resume_state:
 

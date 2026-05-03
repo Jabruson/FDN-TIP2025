@@ -1558,12 +1558,6 @@ class ImageRestorationModel_ipred(BaseModel):
                 device_id = torch.cuda.current_device()
                 device = torch.device("cuda", device_id)
                 self.model_fft = self.model_fft.to(device)
-            else:
-                logger = get_root_logger()
-                logger.warning(
-                    'No path.pretrain_network_fdn_for_val is set. '
-                    'LPNet validation will fall back to saving the input image '
-                    'instead of running joint FDN restoration.')
             self.net_g = define_network(deepcopy(opt['network_g']))
         elif is_deblur or with_ir or only_i or ir_deblur or i_adjust or i_adjust_merge:
             self.net_g = define_network(deepcopy(opt['network_g']))
