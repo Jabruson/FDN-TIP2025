@@ -45,6 +45,20 @@ def _resolve_checkpoint_path(load_path):
     return load_path
 
 
+def _load_checkpoint_state(load_path, param_key='params'):
+    load_path = _resolve_checkpoint_path(load_path)
+    state = torch.load(load_path, map_location=lambda storage, loc: storage)
+    if param_key is not None and param_key in state:
+        state = state[param_key]
+    cleaned_state = {}
+    for key, value in deepcopy(state).items():
+        if key.startswith('module.'):
+            cleaned_state[key[7:]] = value
+        else:
+            cleaned_state[key] = value
+    return load_path, cleaned_state
+
+
 class CharbonnierLoss(nn.Module):
     """Charbonnier Loss (L1)"""
 
@@ -150,6 +164,25 @@ class ImageRestorationModel(BaseModel):
 
         self.net_g = define_network(deepcopy(opt['network_g']))
         self.net_g = self.model_to_device(self.net_g)
+        mar_load_path = self.opt['path'].get('pretrain_network_mar', None)
+        if mar_load_path is not None:
+            bare_net = self.get_bare_model(self.net_g)
+            if not hasattr(bare_net, 'net_a'):
+                raise ValueError(
+                    'path.pretrain_network_mar is set, but network_g does '
+                    'not have a net_a submodule to receive MAR weights.')
+            mar_load_path, mar_state = _load_checkpoint_state(
+                mar_load_path,
+                param_key=self.opt['path'].get('param_key_mar', 'params'))
+            net_a_state = {
+                f'net_a.{key}': value for key, value in mar_state.items()
+            }
+            logger = get_root_logger()
+            logger.info(
+                f'Loading MAR submodule weights for {bare_net.__class__.__name__} '
+                f'from {mar_load_path}.')
+            self._print_different_keys_loading(bare_net, net_a_state, False)
+            bare_net.load_state_dict(net_a_state, strict=False)
         # if True:
         # dict=torch.load
         # load_net = torch.load(
@@ -1505,29 +1538,32 @@ class ImageRestorationModel_ipred(BaseModel):
         self.i_adjust_merge = i_adjust_merge
         self.img_only = img_only
         self.img_3stage = img_3stage
+        self.model_fft = None
         if self.img_i_pred or self.img_i_pred2:
-            self.model_fft = FDN()
-            stage1_path = self.opt['path'].get('pretrain_network_stage1')
-            if not stage1_path:
-                raise ValueError(
-                    'Please set path.pretrain_network_stage1 in the option '
-                    'file for ImageRestorationModel_ipred.')
-            stage1_path = _resolve_checkpoint_path(stage1_path)
-            state = torch.load(
-                stage1_path,
-                map_location=lambda storage, loc: storage.cuda(
-                    torch.cuda.current_device()))
-            stage1_param_key = self.opt['path'].get('param_key_stage1',
-                                                    'params')
-            if stage1_param_key is not None and stage1_param_key in state:
-                state = state[stage1_param_key]
-            self.model_fft.load_state_dict(state, strict=True)
-            for param in self.model_fft.parameters():
-                param.requires_grad = False
-            self.model_fft.eval()
-            device_id = torch.cuda.current_device()
-            device = torch.device("cuda", device_id)
-            self.model_fft = self.model_fft.to(device)
+            fdn_path = self.opt['path'].get(
+                'pretrain_network_fdn_for_val',
+                self.opt['path'].get('pretrain_network_stage1'))
+            if fdn_path:
+                self.model_fft = FDN()
+                _, fdn_state = _load_checkpoint_state(
+                    fdn_path,
+                    param_key=self.opt['path'].get('param_key_fdn_for_val',
+                                                   self.opt['path'].get(
+                                                       'param_key_stage1',
+                                                       'params')))
+                self.model_fft.load_state_dict(fdn_state, strict=True)
+                for param in self.model_fft.parameters():
+                    param.requires_grad = False
+                self.model_fft.eval()
+                device_id = torch.cuda.current_device()
+                device = torch.device("cuda", device_id)
+                self.model_fft = self.model_fft.to(device)
+            else:
+                logger = get_root_logger()
+                logger.warning(
+                    'No path.pretrain_network_fdn_for_val is set. '
+                    'LPNet validation will fall back to saving the input image '
+                    'instead of running joint FDN restoration.')
             self.net_g = define_network(deepcopy(opt['network_g']))
         elif is_deblur or with_ir or only_i or ir_deblur or i_adjust or i_adjust_merge:
             self.net_g = define_network(deepcopy(opt['network_g']))
@@ -1981,11 +2017,17 @@ class ImageRestorationModel_ipred(BaseModel):
                     i_low = self.gray_trans(in_tensor)
                     i_high = self.gray_trans(gt_tensor)
                     ratio_pred = self.net_g(in_tensor) #gtratio
-                    ratio = torch.mean(i_low, dim=(2, 3))/ratio_pred
-                    pred = self.model_fft(in_tensor, ori=in_tensor, device=self.device, ratio_i=ratio)
-                    pred_mid = pred[1]
-                    i_low=pred[2]
-                    pred = pred[0]
+                    if self.model_fft is None:
+                        ratio_img = ratio_pred.unsqueeze(-1).unsqueeze(-1)
+                        ratio_img = ratio_img.expand(-1, 1, h + h_n, w + w_n)
+                        pred = in_tensor
+                        pred_mid = ratio_img.repeat(1, 3, 1, 1)
+                    else:
+                        ratio = torch.mean(i_low, dim=(2, 3))/ratio_pred
+                        pred = self.model_fft(in_tensor, ori=in_tensor, device=self.device, ratio_i=ratio)
+                        pred_mid = pred[1]
+                        i_low=pred[2]
+                        pred = pred[0]
                 else:
                     pred = self.net_g(in_tensor)
                 pred = pred[:, :, :h, :w]

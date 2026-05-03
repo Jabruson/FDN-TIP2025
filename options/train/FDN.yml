@@ -52,6 +52,8 @@ network_g:
 # path
 path:
   dataset_root: ${project_root}/datasets/lolblur
+  pretrain_network_mar: ${project_root}/experiments/MAR/models
+  param_key_mar: params
   pretrain_network_g:
   strict_load_g:
   resume_state:

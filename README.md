@@ -20,6 +20,22 @@ Nighttime handheld photography is often affected by both low-light degradation a
 
 This repository is organized for direct reproduction and further research. The codebase now avoids hard-coded local paths in the main training, inference, and evaluation workflow. In most cases, users only need to edit the corresponding YAML file in `options/`.
 
+## Quick Start
+
+Before running training or inference, users usually only need to check and modify the following items:
+
+1. Dataset root in the corresponding YAML file
+2. Checkpoint path in the corresponding YAML file
+3. GPU number in the YAML file and shell script
+4. Output directory for inference or evaluation
+
+Recommended workflow:
+
+1. Prepare datasets with the directory structure shown below
+2. Modify `path.dataset_root` in the YAML file you want to use
+3. If needed, modify pretrained checkpoint paths in `path.*`
+4. Run the provided shell script or Python command directly
+
 ## Architecture
 
 ### Overall Architecture
@@ -90,6 +106,37 @@ FDN-TIP2025-main/
 └── options/
 ```
 
+The code expects different subdirectories for different stages:
+
+- `FDN` training uses `high_sharp` and `low_blur`
+- `MAR` and `LPNet` training use `high_sharp_scaled` and `low_blur_noise`
+- `LOL-v1` inference uses `lol_v1/testlow`
+
+### Example Directory Layout
+
+For `LOL-Blur`, a typical structure is:
+
+```text
+datasets/lolblur/
+├── train/
+│   ├── high_sharp/
+│   ├── low_blur/
+│   ├── high_sharp_scaled/
+│   └── low_blur_noise/
+└── test/
+    ├── high_sharp/
+    ├── low_blur/
+    ├── high_sharp_scaled/
+    └── low_blur_noise/
+```
+
+For `LOL-v1`, a typical structure is:
+
+```text
+datasets/lol_v1/
+└── testlow/
+```
+
 If your dataset is stored elsewhere, edit only the dataset root in the option file:
 
 - `options/train/MAR_train.yml`
@@ -105,13 +152,127 @@ path:
   dataset_root: ${project_root}/datasets/lolblur
 ```
 
+If your dataset layout differs from the default one, you may also directly modify:
+
+- `datasets.train.dataroot_gt`
+- `datasets.train.dataroot_lq`
+- `datasets.val.dataroot_gt`
+- `datasets.val.dataroot_lq`
+- `datasets.val_tiny.dataroot_gt`
+- `datasets.val_tiny.dataroot_lq`
+
+These paths can be relative to `dataset_root`, or you can write full absolute paths if you prefer.
+
+## Which File Should Be Modified
+
+### Training
+
+| Stage | Command | Main YAML | What users usually need to modify |
+| --- | --- | --- | --- |
+| MAR | `sh MAR.sh` | `options/train/MAR_train.yml` | `path.dataset_root`, batch size, GPU count |
+| FDN | `sh fdn.sh` | `options/train/FDN.yml` | `path.dataset_root`, `path.pretrain_network_mar`, batch size, GPU count |
+| LPNet | `sh train_lpnet.sh` | `options/train/LPNet_train.yml` | `path.dataset_root`, batch size, GPU count |
+
+### Inference
+
+| Task | Command | Main YAML | What users usually need to modify |
+| --- | --- | --- | --- |
+| LOL-Blur | `python inference.py -opt options/test/FDN_lolblur.yml` | `options/test/FDN_lolblur.yml` | dataset root, model weights, output root |
+| LOL-v1 | `python inference.py -opt options/test/FDN_lolv1.yml` | `options/test/FDN_lolv1.yml` | dataset root, model weights, output root |
+
+## Important Fields to Modify
+
+Below are the most important fields in the YAML files.
+
+### 1. Dataset Root
+
+```yaml
+path:
+  dataset_root: ${project_root}/datasets/lolblur
+```
+
+Modify this when your dataset is not placed under the repository `datasets/` directory.
+
+### 2. MAR Checkpoint for FDN Training
+
+For FDN training:
+
+```yaml
+path:
+  pretrain_network_mar: ${project_root}/experiments/MAR/models
+```
+
+Modify this to:
+
+- a specific checkpoint file, or
+- a folder containing MAR checkpoints
+
+This checkpoint is loaded into the internal `net_a` module of `FDN`.
+
+### 3. Optional FDN Checkpoint for LPNet Validation
+
+`LPNet` itself is trained independently. However, if you want LPNet validation to produce restored images through the full FDN pipeline, you may additionally set:
+
+```yaml
+path:
+  pretrain_network_fdn_for_val: ${project_root}/experiments/FDN/models
+```
+
+If left empty, LPNet training still runs, but validation will not perform joint FDN restoration.
+### 4. Test-Time Checkpoints
+
+For inference:
+
+```yaml
+path:
+  pretrain_network_g: ${project_root}/checkpoint/FDN_lolblur.pth
+  pretrain_network_predictor: ${project_root}/checkpoint/LPNet_lolblur.pth
+```
+
+Users should replace these paths if they want to test their own trained models.
+
+### 5. Inference Input and Output
+
+```yaml
+inference:
+  input_root: ${path.dataset_root}/test/low_blur_noise
+  input_glob: ${inference.input_root}/*/*
+  output_root: ${project_root}/results/FDN_lolblur
+```
+
+Modify:
+
+- `input_root` if test images are stored elsewhere
+- `input_glob` if the folder depth differs
+- `output_root` if you want results saved elsewhere
+
+### 6. GPU Settings
+
+Please keep these consistent:
+
+- `num_gpu` in YAML
+- `--nproc_per_node` in `MAR.sh`, `fdn.sh`, and `train_lpnet.sh`
+
+For example, if you use a single GPU, then set:
+
+```yaml
+num_gpu: 1
+```
+
+and modify the shell script to:
+
+```bash
+python -m torch.distributed.launch --nproc_per_node=1 ...
+```
+
 ## Training
 
-The full pipeline contains three stages:
+The main restoration pipeline is a two-stage process:
 
 1. `MAR`: auxiliary restoration stage
 2. `FDN`: main restoration network
-3. `LPNet`: illumination-ratio predictor
+
+`LPNet` is an additional illumination-ratio predictor trained separately for final inference.
 
 ### Stage 1: MAR
 
@@ -121,6 +282,14 @@ sh MAR.sh
 
 Main config: `options/train/MAR_train.yml`
 
+Users should mainly check:
+
+- `path.dataset_root`
+- `datasets.train.dataroot_gt`
+- `datasets.train.dataroot_lq`
+- `num_gpu`
+- `batch_size_per_gpu`
+
 ### Stage 2: FDN
 
 ```bash
@@ -128,6 +297,15 @@ sh fdn.sh
 ```
 
 Main config: `options/train/FDN.yml`
+
+Users should mainly check:
+
+- `path.dataset_root`
+- `path.pretrain_network_mar`
+- `datasets.train.dataroot_gt`
+- `datasets.train.dataroot_lq`
+- `num_gpu`
+- `batch_size_per_gpu`
 
 ### Stage 3: LPNet
 
@@ -137,25 +315,30 @@ sh train_lpnet.sh
 
 Main config: `options/train/LPNet_train.yml`
 
-### Important: Previous-Stage Checkpoint for LPNet
+Users should mainly check:
 
-`LPNet` needs a pretrained FDN checkpoint. This is now controlled in the option file instead of being hard-coded inside the model:
+- `path.dataset_root`
+- `datasets.train.dataroot_gt`
+- `datasets.train.dataroot_lq`
+- `num_gpu`
+- `batch_size_per_gpu`
 
-```yaml
-path:
-  pretrain_network_stage1: ${project_root}/experiments/FDN/models
-```
+Optional for image-level LPNet validation:
 
-You may set `pretrain_network_stage1` to either:
-
-- a checkpoint file, such as `experiments/FDN/models/net_g_500000.pth`
-- a checkpoint directory, such as `experiments/FDN/models`
-
-If a directory is given, the code automatically loads the latest `.pth` checkpoint in that directory.
+- `path.pretrain_network_fdn_for_val`
 
 ## Inference
 
 We provide YAML-driven inference scripts. In most cases, you only need to edit the paths and checkpoint locations in `options/test/*.yml`.
+
+Before inference, users should check:
+
+- `path.dataset_root`
+- `path.pretrain_network_g`
+- `path.pretrain_network_predictor`
+- `inference.input_root`
+- `inference.input_glob`
+- `inference.output_root`
 
 ### LOL-Blur
 
@@ -208,6 +391,11 @@ python m.py \
   --output_csv results/fdn_lolblur_metrics.csv
 ```
 
+Users only need to replace:
+
+- `--pred_glob` with their own output image path
+- `--gt_glob` with the corresponding ground-truth path
+
 ### FID
 
 ```bash
@@ -215,6 +403,11 @@ python fid.py \
   --pred_dir results/FDN_lolblur \
   --gt_dir datasets/lolblur/test/high_sharp_scaled
 ```
+
+Users only need to replace:
+
+- `--pred_dir`
+- `--gt_dir`
 
 ## Pretrained Models and Results
 
