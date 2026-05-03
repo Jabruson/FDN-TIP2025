@@ -163,6 +163,15 @@ If your dataset layout differs from the default one, you may also directly modif
 
 These paths can be relative to `dataset_root`, or you can write full absolute paths if you prefer.
 
+### What Is `val_tiny`
+
+`val_tiny` is only a small subset of `val`, used for faster validation during training.
+
+- If you already prepared a tiny validation subset, point `val_tiny` to that subset
+- If you do not need a separate tiny subset, just set `val_tiny` to the same paths as `val`
+
+In other words, `val_tiny` is optional. It is a convenience setting for quick validation, not a separate required dataset.
+
 ## Which File Should Be Modified
 
 ### Training

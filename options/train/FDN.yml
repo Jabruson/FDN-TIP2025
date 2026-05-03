@@ -35,6 +35,8 @@ datasets:
     io_backend:
       type: lmdb
 
+  # val_tiny is an optional small subset of val for faster validation.
+  # If you do not maintain a separate tiny subset, just set it the same as val.
   val_tiny:
     name: lolblur-test
     type: PairedImageDataset
