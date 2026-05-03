@@ -12,7 +12,6 @@ from basicsr.models.archs import define_network
 from basicsr.models.base_model import BaseModel
 from basicsr.utils import get_root_logger, imwrite, tensor2img
 from basicsr.utils.dist_util import get_dist_info
-from gpu_mem_track import MemTracker
 from basicsr.models.losses.losses import *
 
 from basicsr.models.archs.fdnlol24_arch import *
@@ -23,6 +22,27 @@ import torch.nn as nn
 
 loss_module = importlib.import_module('basicsr.models.losses')
 metric_module = importlib.import_module('basicsr.metrics')
+
+
+def _resolve_checkpoint_path(load_path):
+    if osp.isdir(load_path):
+        checkpoint_files = [
+            osp.join(load_path, name) for name in os.listdir(load_path)
+            if name.endswith('.pth')
+        ]
+        if not checkpoint_files:
+            raise FileNotFoundError(
+                f'No checkpoint file was found in directory: {load_path}')
+
+        def _checkpoint_sort_key(path):
+            stem = osp.splitext(osp.basename(path))[0]
+            for token in reversed(stem.split('_')):
+                if token.isdigit():
+                    return (1, int(token))
+            return (0, stem)
+
+        return max(checkpoint_files, key=_checkpoint_sort_key)
+    return load_path
 
 
 class CharbonnierLoss(nn.Module):
@@ -1487,10 +1507,21 @@ class ImageRestorationModel_ipred(BaseModel):
         self.img_3stage = img_3stage
         if self.img_i_pred or self.img_i_pred2:
             self.model_fft = FDN()
+            stage1_path = self.opt['path'].get('pretrain_network_stage1')
+            if not stage1_path:
+                raise ValueError(
+                    'Please set path.pretrain_network_stage1 in the option '
+                    'file for ImageRestorationModel_ipred.')
+            stage1_path = _resolve_checkpoint_path(stage1_path)
             state = torch.load(
-                '/data/tuluwei/code/48v2_500000.pth',
-                map_location=lambda storage, loc: storage.cuda(torch.cuda.current_device()))
-            self.model_fft.load_state_dict(state["params"], strict=True)
+                stage1_path,
+                map_location=lambda storage, loc: storage.cuda(
+                    torch.cuda.current_device()))
+            stage1_param_key = self.opt['path'].get('param_key_stage1',
+                                                    'params')
+            if stage1_param_key is not None and stage1_param_key in state:
+                state = state[stage1_param_key]
+            self.model_fft.load_state_dict(state, strict=True)
             for param in self.model_fft.parameters():
                 param.requires_grad = False
             self.model_fft.eval()

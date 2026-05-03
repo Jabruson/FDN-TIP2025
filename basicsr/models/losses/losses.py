@@ -182,7 +182,7 @@ from torch.nn import functional as F
 from torchvision.models import vgg as vgg
 from collections import OrderedDict
 
-VGG_PRETRAIN_PATH = '/home/tuluwei/pretrain/vgg19-dcbb9e9d.pth'
+VGG_PRETRAIN_PATH = os.environ.get('VGG_PRETRAIN_PATH')
 NAMES = {
     'vgg11': [
         'conv1_1', 'relu1_1', 'pool1', 'conv2_1', 'relu2_1', 'pool2', 'conv3_1', 'relu3_1', 'conv3_2', 'relu3_2',
@@ -275,7 +275,7 @@ class VGGFeatureExtractor(nn.Module):
             if idx > max_idx:
                 max_idx = idx
 
-        if os.path.exists(VGG_PRETRAIN_PATH):
+        if VGG_PRETRAIN_PATH and os.path.exists(VGG_PRETRAIN_PATH):
             vgg_net = getattr(vgg, vgg_type)(pretrained=False)
             state_dict = torch.load(VGG_PRETRAIN_PATH, map_location=lambda storage, loc: storage)
             vgg_net.load_state_dict(state_dict)

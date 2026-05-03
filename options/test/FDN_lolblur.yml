@@ -1,0 +1,26 @@
+name: FDN_lolblur_inference
+scale: 1
+num_gpu: 1
+manual_seed: 42
+
+network_g:
+  type: FDN
+
+network_predictor:
+  type: I_predict_net
+
+path:
+  dataset_root: ${project_root}/datasets/lolblur
+  pretrain_network_g: ${project_root}/checkpoint/FDN_lolblur.pth
+  pretrain_network_predictor: ${project_root}/checkpoint/LPNet_lolblur.pth
+  param_key: params
+  param_key_predictor: params
+
+inference:
+  device: cuda:0
+  input_root: ${path.dataset_root}/test/low_blur_noise
+  input_glob: ${inference.input_root}/*/*
+  gt_root: ${path.dataset_root}/test/high_sharp_scaled
+  gt_glob: ${inference.gt_root}/*/*
+  output_root: ${project_root}/results/FDN_lolblur
+  ratio_mode: predicted_ratio

@@ -6,7 +6,6 @@ import random
 import time
 import torch
 import warnings
-from gpu_mem_track import MemTracker
 from os import path as osp
 
 from basicsr.data import create_dataloader, create_dataset
@@ -19,16 +18,13 @@ from basicsr.utils import (MessageLogger, check_resume, get_env_info,
                            set_random_seed)
 from basicsr.utils.dist_util import get_dist_info, init_dist
 from basicsr.utils.options import dict2str, parse
-import os
-# warnings.filterwarnings("error")
 import warnings
+import os
 
 def custom_warning(message, category, filename, lineno, file=None, line=None):
     print(f"Warning: {message} ({filename}:{lineno})")
 
 warnings.showwarning = custom_warning  # 自定义警告处理函数
-
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3,4,5,6,7' #mri
 
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
 

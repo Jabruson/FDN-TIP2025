@@ -1,18 +1,33 @@
-
-
-import os
-import csv
-import numpy as np
-import torch
-import pyiqa
 import argparse
-from pyiqa.utils.img_util import imread2tensor
-from pyiqa.default_model_configs import DEFAULT_CONFIGS
-import glob
-device = torch.device('cuda:2')
-fid_metric = pyiqa.create_metric('fid', device=device)
-f1='/data/tuluwei/dataset/lolblur_v48/test/low_blur_noise'
-f2='/data/tuluwei/dataset/lolblur/test/high_sharp_scaled'
 
-FID = fid_metric(f1,f2)
-print(f1,f2,FID)
+import pyiqa
+import torch
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--pred_dir',
+        type=str,
+        required=True,
+        help='Directory containing predicted images.')
+    parser.add_argument(
+        '--gt_dir',
+        type=str,
+        required=True,
+        help='Directory containing reference images.')
+    parser.add_argument(
+        '--device',
+        type=str,
+        default='cuda:0' if torch.cuda.is_available() else 'cpu',
+        help='Device for FID evaluation.')
+    args = parser.parse_args()
+
+    device = torch.device(args.device)
+    fid_metric = pyiqa.create_metric('fid', device=device)
+    fid_score = fid_metric(args.pred_dir, args.gt_dir)
+    print(args.pred_dir, args.gt_dir, fid_score)
+
+
+if __name__ == '__main__':
+    main()

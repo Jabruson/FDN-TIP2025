@@ -1,0 +1,24 @@
+name: FDN_lolv1_inference
+scale: 1
+num_gpu: 1
+manual_seed: 42
+
+network_g:
+  type: FDN_lolv1
+
+network_predictor:
+  type: I_predict_net
+
+path:
+  dataset_root: ${project_root}/datasets/lol_v1
+  pretrain_network_g: ${project_root}/checkpoint/FDN_lolv1.pth
+  pretrain_network_predictor: ${project_root}/checkpoint/LPNet_lolv1.pth
+  param_key: params
+  param_key_predictor: params
+
+inference:
+  device: cuda:0
+  input_root: ${path.dataset_root}/testlow
+  input_glob: ${inference.input_root}/*
+  output_root: ${project_root}/results/FDN_lolv1
+  ratio_mode: low_ratio

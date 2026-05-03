@@ -1,12 +1,13 @@
-import cv2
+import argparse
 import glob
+
+import cv2
 import numpy as np
-import os.path as osp
+import torch
 from torchvision.transforms.functional import normalize
 
 from basicsr.utils import img2tensor
-import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+
 try:
     import lpips
 except ImportError:
@@ -14,42 +15,44 @@ except ImportError:
 
 
 def main():
-    # Configurations
-    # -------------------------------------------------------------------------
-    folder_gt = '/data/tuluwei/dataset/lolblur/test/high_sharp_scaled/*/*'
-    folder_restored = '/data/tuluwei/dataset/lolblur/aaai/aaai_saved/*/*'
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--gt_glob', type=str, required=True)
+    parser.add_argument('--restored_glob', type=str, required=True)
+    parser.add_argument(
+        '--device',
+        type=str,
+        default='cuda:0' if torch.cuda.is_available() else 'cpu')
+    args = parser.parse_args()
 
-    # gt_path = [item.replace("low_blur_noise", "high_sharp_scaled") for item in img_path]
+    gt_list = sorted(glob.glob(args.gt_glob))
+    restored_list = sorted(glob.glob(args.restored_glob))
+    if len(gt_list) != len(restored_list):
+        raise ValueError(
+            f'Mismatched image counts: {len(gt_list)} vs {len(restored_list)}')
 
-    # crop_border = 4
-    suffix = ''
-    # -------------------------------------------------------------------------
-    loss_fn_vgg = lpips.LPIPS(net='vgg').cuda()  # RGB, normalized to [-1,1]
+    device = torch.device(args.device)
+    loss_fn_vgg = lpips.LPIPS(net='vgg').to(device)
     lpips_all = []
-    gt_list = sorted(glob.glob(folder_gt))
-    restore_path =  sorted(glob.glob(folder_restored))
-    # print(restore_path)
     mean = [0.5, 0.5, 0.5]
     std = [0.5, 0.5, 0.5]
-    for i, img_path in enumerate(gt_list):
-        # basename, ext = osp.splitext(osp.basename(img_path))
-        img_gt = cv2.imread(img_path, cv2.IMREAD_UNCHANGED).astype(np.float32) / 255.
-        img_restored = cv2.imread(restore_path[i], cv2.IMREAD_UNCHANGED).astype(
-            np.float32) / 255.
 
-        img_gt, img_restored = img2tensor([img_gt, img_restored], bgr2rgb=True, float32=True)
-        # norm to [-1, 1]
+    for i, (gt_path, restored_path) in enumerate(zip(gt_list, restored_list),
+                                                  start=1):
+        img_gt = cv2.imread(gt_path, cv2.IMREAD_UNCHANGED).astype(np.float32) / 255.0
+        img_restored = cv2.imread(restored_path,
+                                  cv2.IMREAD_UNCHANGED).astype(np.float32) / 255.0
+
+        img_gt, img_restored = img2tensor(
+            [img_gt, img_restored], bgr2rgb=True, float32=True)
         normalize(img_gt, mean, std, inplace=True)
         normalize(img_restored, mean, std, inplace=True)
 
-        # calculate lpips
-        lpips_val = loss_fn_vgg(img_restored.unsqueeze(0).cuda(), img_gt.unsqueeze(0).cuda())
-
-        print(f'{i+1:3d}: . \tLPIPS: {lpips_val.item():.6f}.')
+        lpips_val = loss_fn_vgg(img_restored.unsqueeze(0).to(device),
+                                img_gt.unsqueeze(0).to(device))
         lpips_all.append(lpips_val.item())
+        print(f'{i:3d}: LPIPS {lpips_val.item():.6f} {restored_path}')
 
-        print(f'Average: LPIPS: {sum(lpips_all) / len(lpips_all):.6f}')
-    print(f'Average: LPIPS: {sum(lpips_all) / len(lpips_all):.6f}')
+    print(f'Average LPIPS: {sum(lpips_all) / len(lpips_all):.6f}')
 
 
 if __name__ == '__main__':

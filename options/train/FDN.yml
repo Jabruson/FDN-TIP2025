@@ -9,8 +9,8 @@ datasets:
   train:
     name: lolblur-train
     type: PairedImageDataset
-    dataroot_gt: /data/tuluwei/dataset/lolblur/train/high_sharp/*/*
-    dataroot_lq: /data/tuluwei/dataset/lolblur/train/low_blur/*/*
+    dataroot_gt: train/high_sharp/*/*
+    dataroot_lq: train/low_blur/*/*
 
     filename_tmpl: '{}'
     io_backend:
@@ -30,16 +30,17 @@ datasets:
   val:
     name: lolblur-test
     type: PairedImageDataset
-    dataroot_gt: /data/tuluwei/dataset/lolblur/test/high_sharp/*/*
-    dataroot_lq: /data/tuluwei/dataset/lolblur/test/low_blur/*/*
+    dataroot_gt: test/high_sharp/*/*
+    dataroot_lq: test/low_blur/*/*
     io_backend:
       type: lmdb
 
   val_tiny:
     name: lolblur-test
     type: PairedImageDataset
-    dataroot_gt: /data/tuluwei/dataset/lolblur_test_tiny2/high_sharp/*/*
-    dataroot_lq: /data/tuluwei/dataset/lolblur_test_tiny2/low_blur/*/*
+    dataset_root: ${project_root}/datasets/lolblur_test_tiny2
+    dataroot_gt: high_sharp/*/*
+    dataroot_lq: low_blur/*/*
     io_backend:
       type: lmdb
 
@@ -50,6 +51,7 @@ network_g:
 
 # path
 path:
+  dataset_root: ${project_root}/datasets/lolblur
   pretrain_network_g:
   strict_load_g:
   resume_state:

@@ -1,87 +1,76 @@
-from basicsr.utils import get_root_logger, imwrite, tensor2img
+import argparse
+import os
 
-from basicsr.models.archs.FDN_arch import *
-
-from basicsr.models.archs.LPNet_arch import *
-from basicsr.utils import img2tensor
-import torch
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
-import glob
-def hist3d(img):
-    b,g,r=cv2.split(img)
-    b=cv2.equalizeHist(b)
-    g=cv2.equalizeHist(g)
-    r=cv2.equalizeHist(r)
-    b=b[:,:,np.newaxis]
-    g = g[:, :, np.newaxis]
-    r = r[:, :, np.newaxis]
-    return np.concatenate([b,g,r],axis=2)
-load_path="/data/tuluwei/code/48v2_500000.pth"
+import torch
+import torch.nn.functional as F
+from torchvision import transforms
 
-load_path_pred="/data/tuluwei/code/FDN/net_g_172600.pth"
-file="/data/tuluwei/dataset/lolblur/test/low_blur_noise/*/*"
-gt_file="/data/tuluwei/dataset/lolblur/test/high_sharp_scaled/*/*"
+from basicsr.models.archs.FDN_arch import FDN
+from basicsr.models.archs.LPNet_arch import I_predict_net
+from basicsr.utils import img2tensor, imwrite, tensor2img
 
-device=torch.device("cuda:3")
-net_ipred=I_predict_net()
-load_net_i = torch.load(
-            load_path_pred, map_location=lambda storage, loc: storage.cuda(device))
-load_net = torch.load(
-            load_path, map_location=lambda storage, loc: storage.cuda(device))
-# net=fft_high_light_with_mlp_new_gamma_pformer_v48_fftffn().to(device)
-net=FDN().to(device)
 
-net=net.eval()
-net.load_state_dict(load_net["params"],strict=True)
-net=net.to(device)
+def load_weights(network, load_path, device):
+    state = torch.load(load_path, map_location=device)
+    if 'params' in state:
+        state = state['params']
+    network.load_state_dict(state, strict=True)
 
-net_ipred=net_ipred.eval()
-net_ipred.load_state_dict(load_net_i["params"],strict=True)
-net_ipred=net_ipred.to(device)
-gray_trans=transforms.Compose([transforms.Grayscale(num_output_channels=1)])
 
-with torch.no_grad():
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--restorer_ckpt', type=str, required=True)
+    parser.add_argument('--predictor_ckpt', type=str, required=True)
+    parser.add_argument('--input_image', type=str, required=True)
+    parser.add_argument('--output_dir', type=str, default='multi_r')
+    parser.add_argument('--device', type=str, default='cuda:0')
+    parser.add_argument('--ratio_start', type=float, default=0.0)
+    parser.add_argument('--ratio_end', type=float, default=1.0)
+    parser.add_argument('--ratio_step', type=float, default=0.01)
+    args = parser.parse_args()
 
-    imgs=sorted(glob.glob(file))
-    imgs_gt=sorted(glob.glob(gt_file))
-    i=0
-    for img1,gt in zip(imgs,imgs_gt):
-        i=i+1
-        for i in np.arange(0, 1, 0.01):
-            img1="/data/tuluwei/dataset/lolblur/test/low_blur_noise/0256/0089.png"
-            print(img1.replace("lolblur","FDN_lolblur"),i)
-            
-            img_lq=cv2.imread(img1)
+    device = torch.device(args.device)
+    os.makedirs(args.output_dir, exist_ok=True)
 
-            img_lq = img_lq.astype(np.float32) / 255.
-            img_gt, img_lq = img2tensor([img_lq, img_lq],
-                                                bgr2rgb=True,
-                                                float32=True)
+    restorer = FDN().to(device).eval()
+    predictor = I_predict_net().to(device).eval()
+    load_weights(restorer, args.restorer_ckpt, device)
+    load_weights(predictor, args.predictor_ckpt, device)
 
-            img_lq=img_lq.unsqueeze(0)
-            img_lq=img_lq.to(device)
-            b, c, h, w = img_lq.shape
-            # 让输入是32的倍数
-            #
+    img_lq = cv2.imread(args.input_image, cv2.IMREAD_COLOR)
+    if img_lq is None:
+        raise FileNotFoundError(f'Failed to read image: {args.input_image}')
 
-            h_n = (32 - h % 32) % 32
-            w_n = (32 - w % 32) % 32
-            img_lq = F.pad(img_lq, (0, w_n, 0, h_n), mode='reflect')
-            low_ratio=gray_trans(img_lq)
+    img_lq = img_lq.astype(np.float32) / 255.0
+    img_lq = img2tensor(img_lq, bgr2rgb=True, float32=True)
+    img_lq = img_lq.unsqueeze(0).to(device)
+    _, _, h, w = img_lq.shape
 
-            ratio =net_ipred(img_lq) #gt
-            # ratio=torch.ones((1,1)).to(device)*0.85
-            low_ratio=torch.mean(low_ratio, dim=(2, 3)) /ratio
-            # low_ratio=low_ratio/low_ratio*0.0
-            ratio=ratio/ratio*i
-            print(ratio,i)
-            # ratio=ratio.unsqueeze(0)
-            result, x_high1q, x_high2q, x_high3q=net(img_lq,ratio_i=ratio,device=device)
+    h_pad = (32 - h % 32) % 32
+    w_pad = (32 - w % 32) % 32
+    if h_pad or w_pad:
+        img_lq = F.pad(img_lq, (0, w_pad, 0, h_pad), mode='reflect')
+
+    gray_trans = transforms.Grayscale(num_output_channels=1)
+
+    with torch.no_grad():
+        base_ratio = predictor(img_lq)
+        low_ratio = gray_trans(img_lq)
+        low_ratio = torch.mean(low_ratio, dim=(2, 3)) / base_ratio
+
+        for ratio_scale in np.arange(args.ratio_start, args.ratio_end,
+                                     args.ratio_step):
+            ratio = base_ratio / base_ratio * ratio_scale
+            result = restorer(img_lq, ratio_i=ratio, device=device)[0]
             result = result[:, :, :h, :w]
-            result=tensor2img([result], rgb2bgr=True)
-            # imwrite(result,"./0089ll.png")
-            imwrite(result,"./multi_r/{}.png".format(i))
-        input()
-        # break
+            result = tensor2img(result, rgb2bgr=True)
+            output_path = os.path.join(args.output_dir,
+                                       f'{ratio_scale:.2f}.png')
+            imwrite(result, output_path)
+            print(ratio_scale, output_path, low_ratio.item())
+
+
+if __name__ == '__main__':
+    main()

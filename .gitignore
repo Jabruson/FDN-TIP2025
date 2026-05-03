@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.Python
+.eggs/
+*.egg-info/
+build/
+dist/
+experiments/
+results/
+tb_logger/
+logs/
+metrics.csv
+*.state
+
+# Large local weights for offline use only.
+weights/vgg19-dcbb9e9d.pth

@@ -1,3 +1,5 @@
+import os
+import re
 import yaml
 from collections import OrderedDict
 from os import path as osp
@@ -28,6 +30,64 @@ def ordered_yaml():
     return Loader, Dumper
 
 
+_TEMPLATE_PATTERN = re.compile(r'\$\{([^}]+)\}')
+
+
+def _get_by_dotted_key(data, dotted_key):
+    current = data
+    for key in dotted_key.split('.'):
+        if isinstance(current, dict) and key in current:
+            current = current[key]
+        else:
+            return None
+    return current
+
+
+def _resolve_string(value, full_opt):
+    value = osp.expanduser(os.path.expandvars(value))
+
+    def replace_fn(match):
+        key = match.group(1).strip()
+        if key == 'project_root':
+            return full_opt['path']['root']
+        resolved = _get_by_dotted_key(full_opt, key)
+        if resolved is None or isinstance(resolved, (dict, list)):
+            return match.group(0)
+        return str(resolved)
+
+    return _TEMPLATE_PATTERN.sub(replace_fn, value)
+
+
+def _resolve_templates(value, full_opt, max_passes=10):
+    current = value
+    for _ in range(max_passes):
+        resolved = _resolve_templates_once(current, full_opt)
+        if resolved == current:
+            break
+        current = resolved
+    return current
+
+
+def _resolve_templates_once(value, full_opt):
+    if isinstance(value, dict):
+        return type(value)((k, _resolve_templates_once(v, full_opt))
+                           for k, v in value.items())
+    if isinstance(value, list):
+        return [_resolve_templates_once(item, full_opt) for item in value]
+    if isinstance(value, str):
+        return _resolve_string(value, full_opt)
+    return value
+
+
+def _join_if_relative(path_value, base_dir):
+    if path_value is None:
+        return None
+    path_value = osp.expanduser(os.path.expandvars(path_value))
+    if base_dir and not osp.isabs(path_value):
+        path_value = osp.join(base_dir, path_value)
+    return osp.normpath(path_value)
+
+
 def parse(opt_path, is_train=True):
     """Parse option file.
 
@@ -43,27 +103,39 @@ def parse(opt_path, is_train=True):
         opt = yaml.load(f, Loader=Loader)
 
     opt['is_train'] = is_train
+    opt.setdefault('path', OrderedDict())
+    opt['path']['root'] = osp.abspath(
+        osp.join(__file__, osp.pardir, osp.pardir, osp.pardir))
+    opt = _resolve_templates(opt, opt)
 
     # datasets
     if 'datasets' in opt:
+        global_dataset_root = opt['path'].get('dataset_root')
         for phase, dataset in opt['datasets'].items():
             # for several datasets, e.g., test_1, test_2
             phase = phase.split('_')[0]
             dataset['phase'] = phase
             if 'scale' in opt:
                 dataset['scale'] = opt['scale']
+            dataset_root = dataset.get('dataset_root', global_dataset_root)
+            if dataset_root is not None:
+                dataset['dataset_root'] = _join_if_relative(
+                    dataset_root, opt['path']['root'])
             if dataset.get('dataroot_gt') is not None:
-                dataset['dataroot_gt'] = osp.expanduser(dataset['dataroot_gt'])
+                dataset['dataroot_gt'] = _join_if_relative(
+                    dataset['dataroot_gt'],
+                    dataset.get('dataset_root', opt['path']['root']))
             if dataset.get('dataroot_lq') is not None:
-                dataset['dataroot_lq'] = osp.expanduser(dataset['dataroot_lq'])
+                dataset['dataroot_lq'] = _join_if_relative(
+                    dataset['dataroot_lq'],
+                    dataset.get('dataset_root', opt['path']['root']))
 
     # paths
     for key, val in opt['path'].items():
-        if (val is not None) and ('resume_state' in key
-                                  or 'pretrain_network' in key):
-            opt['path'][key] = osp.expanduser(val)
-    opt['path']['root'] = osp.abspath(
-        osp.join(__file__, osp.pardir, osp.pardir, osp.pardir))
+        if isinstance(val, str) and key != 'root':
+            if ('resume_state' in key or 'pretrain_network' in key
+                    or key.endswith(('_root', '_dir', '_path', '_file'))):
+                opt['path'][key] = _join_if_relative(val, opt['path']['root'])
     if is_train:
         experiments_root = osp.join(opt['path']['root'], 'experiments',
                                     opt['name'])
